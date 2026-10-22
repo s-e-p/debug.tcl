@@ -123,7 +123,17 @@ proc tclsh {{scope {uplevel 1}} {script {}}} {
 
 	while {true} {
 		if {$script ne "" && $out eq ""} {
-			set script [catch {{*}$scope $script} result error]
+			if {[regexp {\A *:(?!:) *(.*)?\Z} $script -> expr]} {
+				if {[string is space $expr]} {
+					set script [list {*}$scope ->]
+				} else {
+					set script [list -> $scope $expr]
+				}
+			} {
+				set script [list {*}$scope $script]
+			}
+
+			set script [catch {{*}$script} result error]
 
 			if {$script != 0} {
 				set result [format "%s\ncode: %s" \
@@ -139,7 +149,7 @@ proc tclsh {{scope {uplevel 1}} {script {}}} {
 		}
 
 		if {$prompt} {
-			puts -nonewline "$out[expr {($cmd eq "") ? "> ": ""}]"
+			puts -nonewline "$out[expr {($cmd eq "") ? "> " : ""}]"
 			flush stdout
 			set out ""
 			set prompt false
@@ -153,15 +163,13 @@ proc tclsh {{scope {uplevel 1}} {script {}}} {
 		if {$eof < 0} break
 		if {$eof == 0} continue
 
-		append new \n
-
 		if {$cmd eq ""} {
 			set cmd $new
 		} {
-			append cmd $new
+			append cmd \n $new
 		}
 
-		if {[info complete $cmd]} {
+		if {[info complete ${cmd}\n]} {
 			set script $cmd
 			set cmd ""
 		}
@@ -170,6 +178,34 @@ proc tclsh {{scope {uplevel 1}} {script {}}} {
 	set tcl_interactive $save
 	if {$tcl_interactive} {
 		puts "leaving ..."
+	}
+}
+
+proc -> {{scope eval} args} {
+	if {[llength $args] != 0} {
+		set input [concat {*}$args]
+		set save [regexp {\A *([a-zA-Z0-9:()]+) *= *(.*)\Z}\
+			$input -> var input]
+
+		set save [expr {$save ? $var : "last"}]
+		set eval [list uplevel 1 {*}$scope [
+			list set $save \[expr \{${input}\}\]
+		]]
+
+		if {[catch $eval result]} {
+			puts "error: $result"
+		} {
+			puts $result
+		}
+		return
+	}
+
+	while true {
+		puts -nonewline "-> "
+		flush stdout
+		if {[gets stdin input] == -1} break
+		if {[string is space $input]} continue
+		-> {uplevel 1} $input
 	}
 }
 
