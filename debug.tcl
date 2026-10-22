@@ -100,6 +100,14 @@ apply {{} {
 						lappend start $source
 					}
 				}
+
+			-i	{
+					set ::argv [lassign $::argv source]
+					incr ::argc -1
+					lappend start [list puts $source]
+					lappend start [list source $source]
+				}
+
 			default	{
 					lappend start [list puts $source]
 					lappend start [list uplevel #0\
